@@ -12,6 +12,8 @@ app = FastAPI(
     description="为前端提供分析页面的数据支持",
     version="1.0.0"
 )
+origin_regex = r"^(http://localhost(:\d+)?|https://ai-rag-.*\.vercel\.app)$"
+
 allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -19,7 +21,8 @@ allowed_origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    # allow_origins=allowed_origins,
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有方法
     allow_headers=["*"],  # 允许所有标头
