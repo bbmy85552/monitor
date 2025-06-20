@@ -18,12 +18,12 @@ allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://192.168.105.13:3000",
-    "https://ai-dev.awesomefuture.top/"
+    "https://ai-dev.awesomefuture.top"
 ]
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=allowed_origins,
-    allow_origin_regex=origin_regex,
+    allow_origins=allowed_origins,
+    # allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有方法
     allow_headers=["*"],  # 允许所有标头
