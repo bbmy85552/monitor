@@ -17,7 +17,8 @@ origin_regex = r"^(http://localhost(:\d+)?|https://ai-rag-.*\.vercel\.app)$"
 allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
-    "http://192.168.105.13:3000"
+    "http://192.168.105.13:3000",
+    "https://ai-dev.awesomefuture.top/"
 ]
 app.add_middleware(
     CORSMiddleware,
