@@ -27,7 +27,7 @@ from models import (
 async def lifespan(app: FastAPI):
     # 启动时初始化数据库连接池
     try:
-    await db_manager.init_pool()
+        await db_manager.init_pool()
         logger.info("应用启动成功，数据库连接池初始化完成")
     except Exception as e:
         logger.error(f"应用启动失败: {str(e)}")
@@ -90,7 +90,7 @@ async def health_check():
                 "error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-)
+        )
 
 
 @app.get("/analytics/data", tags=["Analytics"])
@@ -354,8 +354,3 @@ async def get_chatbot_interface_data(chatbot_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
-
-# 如何运行:
-# 1. 安装依赖: pip install fastapi uvicorn aiomysql python-dotenv cos-python-sdk-v5 tencentcloud-sdk-python
-# 2. 配置环境变量: 复制 env.example 为 .env 并填写正确的配置
-# 3. 在终端运行: uvicorn main:app --reload
