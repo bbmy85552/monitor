@@ -4,6 +4,11 @@ from datetime import datetime, date, timedelta
 import random  # 导入 random 模块用于生成随机数
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # 导入自定义模块
 from database import db_manager, ChatbotInterface, ImageInformation
@@ -21,7 +26,12 @@ from models import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时初始化数据库连接池
-    await db_manager.init_pool()
+    try:
+        await db_manager.init_pool()
+        logger.info("应用启动成功，数据库连接池初始化完成")
+    except Exception as e:
+        logger.error(f"应用启动失败: {str(e)}")
+        raise e
     yield
     # 关闭时清理数据库连接池
     await db_manager.close_pool()
@@ -52,6 +62,35 @@ app.add_middleware(
     allow_methods=["*"],  # 允许所有方法
     allow_headers=["*"],  # 允许所有标头
 )
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """
+    健康检查端点，用于检查数据库连接和服务状态
+    """
+    try:
+        # 检查数据库连接
+        test_query = "SELECT 1 as test"
+        result = await db_manager.execute_query(test_query)
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "timestamp": datetime.now().isoformat(),
+            "database_test": result[0]['test'] if result else None
+        }
+    except Exception as e:
+        logger.error(f"健康检查失败: {str(e)}")
+        raise HTTPException(
+            status_code=503, 
+            detail={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
 
 
 @app.get("/analytics/data", tags=["Analytics"])

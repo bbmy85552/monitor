@@ -6,6 +6,11 @@ from typing import Optional, Dict, Any
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
@@ -24,37 +29,84 @@ DB_CONFIG = {
 class DatabaseManager:
     def __init__(self):
         self.pool = None
+        self._is_initialized = False
     
     async def init_pool(self):
         """初始化数据库连接池"""
-        self.pool = await aiomysql.create_pool(**DB_CONFIG)
+        try:
+            logger.info("正在初始化数据库连接池...")
+            logger.info(f"数据库配置: host={DB_CONFIG['host']}, port={DB_CONFIG['port']}, user={DB_CONFIG['user']}, db={DB_CONFIG['db']}")
+            
+            # 验证必要的环境变量
+            if not all([DB_CONFIG['host'], DB_CONFIG['user'], DB_CONFIG['password'], DB_CONFIG['db']]):
+                missing_vars = []
+                if not DB_CONFIG['host']: missing_vars.append('DB_HOST')
+                if not DB_CONFIG['user']: missing_vars.append('DB_USER')
+                if not DB_CONFIG['password']: missing_vars.append('DB_PASSWORD')
+                if not DB_CONFIG['db']: missing_vars.append('DB_NAME')
+                
+                error_msg = f"缺少必要的环境变量: {', '.join(missing_vars)}"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            self.pool = await aiomysql.create_pool(**DB_CONFIG)
+            self._is_initialized = True
+            logger.info("数据库连接池初始化成功")
+            
+        except Exception as e:
+            logger.error(f"数据库连接池初始化失败: {str(e)}")
+            self.pool = None
+            self._is_initialized = False
+            raise e
     
     async def close_pool(self):
         """关闭数据库连接池"""
         if self.pool:
             self.pool.close()
             await self.pool.wait_closed()
+            self._is_initialized = False
+            logger.info("数据库连接池已关闭")
+    
+    def _check_pool(self):
+        """检查连接池状态"""
+        if not self._is_initialized or self.pool is None:
+            raise RuntimeError("数据库连接池未初始化，请检查数据库配置和网络连接")
     
     async def execute_query(self, query: str, params: tuple = None):
         """执行查询语句"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cursor:
-                await cursor.execute(query, params)
-                return await cursor.fetchall()
+        self._check_pool()
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute(query, params)
+                    return await cursor.fetchall()
+        except Exception as e:
+            logger.error(f"数据库查询失败: {str(e)}")
+            raise e
     
     async def execute_insert(self, query: str, params: tuple = None):
         """执行插入语句并返回插入的ID"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(query, params)
-                return cursor.lastrowid
+        self._check_pool()
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(query, params)
+                    return cursor.lastrowid
+        except Exception as e:
+            logger.error(f"数据库插入失败: {str(e)}")
+            raise e
     
     async def execute_update(self, query: str, params: tuple = None):
         """执行更新语句并返回影响的行数"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                result = await cursor.execute(query, params)
-                return result
+        self._check_pool()
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    result = await cursor.execute(query, params)
+                    return result
+        except Exception as e:
+            logger.error(f"数据库更新失败: {str(e)}")
+            raise e
 
 # 全局数据库管理器实例
 db_manager = DatabaseManager()
