@@ -27,7 +27,7 @@ from models import (
 async def lifespan(app: FastAPI):
     # 启动时初始化数据库连接池
     try:
-        await db_manager.init_pool()
+    await db_manager.init_pool()
         logger.info("应用启动成功，数据库连接池初始化完成")
     except Exception as e:
         logger.error(f"应用启动失败: {str(e)}")
@@ -90,7 +90,7 @@ async def health_check():
                 "error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-        )
+)
 
 
 @app.get("/analytics/data", tags=["Analytics"])

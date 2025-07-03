@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 import logging
+import ssl
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +27,20 @@ DB_CONFIG = {
     'autocommit': True
 }
 
+# 根据环境添加SSL配置
+# 如果是生产环境或者配置了SSL，则启用SSL连接
+if os.getenv('APP_ENV') == 'production' or os.getenv('DB_SSL_ENABLED', 'false').lower() == 'true':
+    # 创建SSL上下文
+    ssl_context = ssl.create_default_context()
+    # 对于腾讯云等云厂商，通常不需要验证主机名
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    
+    DB_CONFIG['ssl'] = ssl_context
+    logger.info("已启用数据库SSL连接")
+else:
+    logger.info("未启用数据库SSL连接（本地开发环境）")
+
 class DatabaseManager:
     def __init__(self):
         self.pool = None
@@ -36,6 +51,12 @@ class DatabaseManager:
         try:
             logger.info("正在初始化数据库连接池...")
             logger.info(f"数据库配置: host={DB_CONFIG['host']}, port={DB_CONFIG['port']}, user={DB_CONFIG['user']}, db={DB_CONFIG['db']}")
+            
+            # 显示SSL状态
+            if 'ssl' in DB_CONFIG:
+                logger.info("SSL连接: 已启用")
+            else:
+                logger.info("SSL连接: 未启用")
             
             # 验证必要的环境变量
             if not all([DB_CONFIG['host'], DB_CONFIG['user'], DB_CONFIG['password'], DB_CONFIG['db']]):
