@@ -5,6 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.12",
-    "uvicorn[standard]>=0.34.3",
+    "aiomysql==0.2.0",
+    "cos-python-sdk-v5==1.9.25",
+    "fastapi==0.104.1",
+    "pydantic==2.5.0",
+    "python-dotenv==1.0.0",
+    "python-multipart==0.0.6",
+    "tencentcloud-sdk-python==3.0.1056",
+    "uvicorn[standard]==0.24.0",
 ]

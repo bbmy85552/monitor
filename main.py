@@ -1,16 +1,40 @@
 # main.py
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from datetime import datetime, date, timedelta
 import random  # 导入 random 模块用于生成随机数
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+
+# 导入自定义模块
+from database import db_manager, ChatbotInterface, ImageInformation
+from cos_service import cos_service
+from models import (
+    ChatInterfaceUpdateRequest,
+    ChatInterfaceUpdateResponse,
+    ErrorResponse
+)
+
+
+# -----------------------------------------------------------
+# 生命周期管理
+# -----------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时初始化数据库连接池
+    await db_manager.init_pool()
+    yield
+    # 关闭时清理数据库连接池
+    await db_manager.close_pool()
+
 
 # -----------------------------------------------------------
 # 创建 FastAPI 应用
 # -----------------------------------------------------------
 app = FastAPI(
-    title="Analytics API",
-    description="为前端提供分析页面的数据支持",
-    version="1.0.0"
+    title="Chatbot Settings API",
+    description="为前端提供聊天机器人设置和分析页面的数据支持",
+    version="1.0.0",
+    lifespan=lifespan
 )
 origin_regex = r"^(http://localhost(:\d+)?|https://ai-rag-.*\.vercel\.app)$"
 
@@ -51,7 +75,7 @@ def _get_mock_data(chatbot_id: str, start_date: datetime, end_date: datetime) ->
     all_dates = []
     current_date = start_date.date()
     # Corrected end_date logic to be inclusive
-    loop_end_date = end_date.date()
+    loop_end_date = (end_date - timedelta(days=1)).date()  # 减去一天
     while current_date <= loop_end_date:
         all_dates.append(current_date)
         current_date += timedelta(days=1)
@@ -85,7 +109,6 @@ def _get_mock_data(chatbot_id: str, start_date: datetime, end_date: datetime) ->
     # --- 随机生成地理位置分布数据 (使用英文名，以符合前端要求) ---
     geo_countries_english = ["United States", "China", "Japan", "Germany", "United Kingdom", "India", "Canada"]
     geo_distribution = [{"country": country, "count": random.randint(10, 200)} for country in geo_countries_english]
-
 
     # --- 组装最终的 mock_data ---
     mock_data = {
@@ -144,199 +167,156 @@ def _get_mock_data(chatbot_id: str, start_date: datetime, end_date: datetime) ->
         }
     }
     return mock_data
-"""
-{
-    "chatbot_id": "dc2b0e714bccfa50e70a238ea86c34c09ff73cb99136b1caef0ee9e61580b700",
-    "time_range": {
-        "start_date": "2025-06-11T00:00:00",
-        "end_date": "2025-06-18T23:59:59"
-    },
-    "chats": {
-        "summary": {
-            "total_chats": {
-                "value": 244,
-                "change_percentage": -0.42
-            },
-            "total_messages": {
-                "value": 589,
-                "change_percentage": -0.08
-            },
-            "positive_feedback_messages": {
-                "value": 374,
-                "change_percentage": 0.27
-            },
-            "negative_feedback_messages": {
-                "value": 34,
-                "change_percentage": 0.07
-            }
-        },
-        "chats_over_time": [
-            {
-                "date": "2025-06-11",
-                "count": 10
-            },
-            {
-                "date": "2025-06-12",
-                "count": 27
-            },
-            {
-                "date": "2025-06-13",
-                "count": 25
-            },
-            {
-                "date": "2025-06-14",
-                "count": 36
-            },
-            {
-                "date": "2025-06-15",
-                "count": 13
-            },
-            {
-                "date": "2025-06-16",
-                "count": 44
-            },
-            {
-                "date": "2025-06-17",
-                "count": 46
-            },
-            {
-                "date": "2025-06-18",
-                "count": 43
-            }
-        ],
-        "geo": [
-            {
-                "country": "United States",
-                "count": 146
-            },
-            {
-                "country": "China",
-                "count": 199
-            },
-            {
-                "country": "Japan",
-                "count": 25
-            },
-            {
-                "country": "Germany",
-                "count": 152
-            },
-            {
-                "country": "United Kingdom",
-                "count": 154
-            },
-            {
-                "country": "India",
-                "count": 90
-            },
-            {
-                "country": "Canada",
-                "count": 136
-            }
-        ]
-    },
-    "topics": {
-        "total_topics_identified": 5,
-        "distribution": [
-            {
-                "category": "情感咨询",
-                "count": 69,
-                "percentage": 0.22
-            },
-            {
-                "category": "功能使用",
-                "count": 62,
-                "percentage": 0.2
-            },
-            {
-                "category": "文案编写",
-                "count": 73,
-                "percentage": 0.23
-            },
-            {
-                "category": "内容续写",
-                "count": 53,
-                "percentage": 0.17
-            },
-            {
-                "category": "代码生成",
-                "count": 56,
-                "percentage": 0.18
-            }
-        ]
-    },
-    "sentiment": {
-        "overall_sentiment_score": 0.06,
-        "distribution": [
-            {
-                "category": "Positive",
-                "count": 374,
-                "percentage": 0.63
-            },
-            {
-                "category": "Neutral",
-                "count": 181,
-                "percentage": 0.31
-            },
-            {
-                "category": "Negative",
-                "count": 34,
-                "percentage": 0.06
-            }
-        ],
-        "sentiment_over_time": [
-            {
-                "date": "2025-06-11",
-                "positive_count": 70,
-                "negative_count": 4,
-                "neutral_count": 26
-            },
-            {
-                "date": "2025-06-12",
-                "positive_count": 43,
-                "negative_count": 4,
-                "neutral_count": 27
-            },
-            {
-                "date": "2025-06-13",
-                "positive_count": 55,
-                "negative_count": 1,
-                "neutral_count": 28
-            },
-            {
-                "date": "2025-06-14",
-                "positive_count": 28,
-                "negative_count": 6,
-                "neutral_count": 12
-            },
-            {
-                "date": "2025-06-15",
-                "positive_count": 53,
-                "negative_count": 1,
-                "neutral_count": 30
-            },
-            {
-                "date": "2025-06-16",
-                "positive_count": 38,
-                "negative_count": 2,
-                "neutral_count": 21
-            },
-            {
-                "date": "2025-06-17",
-                "positive_count": 23,
-                "negative_count": 6,
-                "neutral_count": 17
-            },
-            {
-                "date": "2025-06-18",
-                "positive_count": 64,
-                "negative_count": 10,
-                "neutral_count": 20
-            }
-        ]
-    }
-}
-"""
+
+
+@app.post("/settings/update_chat_interface",
+          response_model=ChatInterfaceUpdateResponse,
+          responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+          tags=["Settings"])
+async def update_chat_interface(request: ChatInterfaceUpdateRequest):
+    """
+    更新聊天界面设置，包括图像上传处理
+    """
+    try:
+        # 准备数据库保存的数据
+        save_data = {
+            'chatbot_id': request.chatbot_id,
+            'display_name': request.display_name,
+            'initial_messages': request.initial_messages,
+            'suggested_message_1': request.suggested_message_1,
+            'suggested_message_2': request.suggested_message_2,
+            'suggested_message_3': request.suggested_message_3,
+            'suggested_message_4': request.suggested_message_4,
+            'message_placeholder': request.message_placeholder,
+            'footer_content': request.footer_content,
+            'theme': request.theme.value if request.theme else None,
+            'user_message_color': request.user_message_color,
+            'sync_header_color': request.sync_header_color,
+            'bubble_color': request.bubble_color,
+            'bubble_position': request.bubble_position.value if request.bubble_position else None,
+            'auto_open_seconds': request.auto_open_seconds,
+            'show_suggested_after_first_message': request.show_suggested_after_first_message,
+            'collect_feedback': request.collect_feedback,
+            'allow_regeneration': request.allow_regeneration,
+            'chatbot_icon_url': request.chatbot_icon_url,
+            'bubble_icon_url': request.bubble_icon_url
+        }
+
+        # 处理聊天机器人图标上传
+        final_chatbot_icon_url = request.chatbot_icon_url
+        if request.chatbot_icon_data:
+            success, cos_url, error = cos_service.upload_base64_image(
+                base64_data=request.chatbot_icon_data.file_data,
+                file_name=request.chatbot_icon_data.file_name,
+                asset_type=request.chatbot_icon_data.asset_type.value,
+                chatbot_id=request.chatbot_id
+            )
+
+            if success:
+                # 保存图像信息到数据库
+                await ImageInformation.create(
+                    chatbot_id=request.chatbot_id,
+                    file_name=request.chatbot_icon_data.file_name,
+                    file_type=request.chatbot_icon_data.file_type,
+                    file_size=request.chatbot_icon_data.file_size,
+                    asset_type=request.chatbot_icon_data.asset_type.value,
+                    cos_url=cos_url
+                )
+                final_chatbot_icon_url = cos_url
+            else:
+                raise HTTPException(status_code=400, detail=f"聊天机器人图标上传失败: {error}")
+
+        # 处理气泡图标上传
+        final_bubble_icon_url = request.bubble_icon_url
+        if request.bubble_icon_data:
+            success, cos_url, error = cos_service.upload_base64_image(
+                base64_data=request.bubble_icon_data.file_data,
+                file_name=request.bubble_icon_data.file_name,
+                asset_type=request.bubble_icon_data.asset_type.value,
+                chatbot_id=request.chatbot_id
+            )
+
+            if success:
+                # 保存图像信息到数据库
+                await ImageInformation.create(
+                    chatbot_id=request.chatbot_id,
+                    file_name=request.bubble_icon_data.file_name,
+                    file_type=request.bubble_icon_data.file_type,
+                    file_size=request.bubble_icon_data.file_size,
+                    asset_type=request.bubble_icon_data.asset_type.value,
+                    cos_url=cos_url
+                )
+                final_bubble_icon_url = cos_url
+            else:
+                raise HTTPException(status_code=400, detail=f"气泡图标上传失败: {error}")
+
+        # 更新数据库中的最终URL
+        save_data['chatbot_icon_url'] = final_chatbot_icon_url
+        save_data['bubble_icon_url'] = final_bubble_icon_url
+
+        # 保存到数据库
+        await ChatbotInterface.upsert(save_data)
+
+        return ChatInterfaceUpdateResponse(
+            status=200,
+            message="聊天界面设置保存成功",
+            chatbot_icon_url=final_chatbot_icon_url,
+            bubble_icon_url=final_bubble_icon_url
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
+
+
+@app.get("/settings/chat_interface/{chatbot_id}",
+         tags=["Settings"])
+async def get_chat_interface(chatbot_id: str):
+    """
+    获取聊天界面设置
+    """
+    try:
+        settings = await ChatbotInterface.get_by_chatbot_id(chatbot_id)
+        if not settings:
+            raise HTTPException(status_code=404, detail="聊天机器人配置不存在")
+
+        return {
+            "status": 200,
+            "data": settings
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
+
+
+@app.get("/settings/get_chatbot_interface_data/{chatbot_id}",
+         tags=["Settings"])
+async def get_chatbot_interface_data(chatbot_id: str):
+    """
+    获取指定chatbot_id的完整聊天界面配置数据
+    返回chatbot_interface表的所有字段
+    """
+    try:
+        # 从数据库获取完整的聊天界面配置数据
+        interface_data = await ChatbotInterface.get_by_chatbot_id(chatbot_id)
+
+        if not interface_data:
+            raise HTTPException(status_code=404, detail="指定的聊天机器人配置不存在")
+
+        return {
+            "status": 200,
+            "message": "获取聊天界面配置成功",
+            "data": interface_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
+
 # 如何运行:
-# 1. 保存代码为 main.py
-# 2. 在终端运行: uvicorn main:app --reload
+# 1. 安装依赖: pip install fastapi uvicorn aiomysql python-dotenv cos-python-sdk-v5 tencentcloud-sdk-python
+# 2. 配置环境变量: 复制 env.example 为 .env 并填写正确的配置
+# 3. 在终端运行: uvicorn main:app --reload
