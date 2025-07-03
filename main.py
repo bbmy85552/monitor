@@ -27,14 +27,14 @@ from models import (
 async def lifespan(app: FastAPI):
     # 启动时初始化数据库连接池
     try:
-        await db_manager.init_pool()
+        db_manager.init_pool()
         logger.info("应用启动成功，数据库连接池初始化完成")
     except Exception as e:
         logger.error(f"应用启动失败: {str(e)}")
         raise e
     yield
     # 关闭时清理数据库连接池
-    await db_manager.close_pool()
+    db_manager.close_pool()
 
 
 # -----------------------------------------------------------
@@ -72,7 +72,7 @@ async def health_check():
     try:
         # 检查数据库连接
         test_query = "SELECT 1 as test"
-        result = await db_manager.execute_query(test_query)
+        result = db_manager.execute_query(test_query)
         
         return {
             "status": "healthy",
@@ -253,7 +253,7 @@ async def update_chat_interface(request: ChatInterfaceUpdateRequest):
 
             if success:
                 # 保存图像信息到数据库
-                await ImageInformation.create(
+                ImageInformation.create(
                     chatbot_id=request.chatbot_id,
                     file_name=request.chatbot_icon_data.file_name,
                     file_type=request.chatbot_icon_data.file_type,
@@ -277,7 +277,7 @@ async def update_chat_interface(request: ChatInterfaceUpdateRequest):
 
             if success:
                 # 保存图像信息到数据库
-                await ImageInformation.create(
+                ImageInformation.create(
                     chatbot_id=request.chatbot_id,
                     file_name=request.bubble_icon_data.file_name,
                     file_type=request.bubble_icon_data.file_type,
@@ -294,7 +294,7 @@ async def update_chat_interface(request: ChatInterfaceUpdateRequest):
         save_data['bubble_icon_url'] = final_bubble_icon_url
 
         # 保存到数据库
-        await ChatbotInterface.upsert(save_data)
+        ChatbotInterface.upsert(save_data)
 
         return ChatInterfaceUpdateResponse(
             status=200,
@@ -316,7 +316,7 @@ async def get_chat_interface(chatbot_id: str):
     获取聊天界面设置
     """
     try:
-        settings = await ChatbotInterface.get_by_chatbot_id(chatbot_id)
+        settings = ChatbotInterface.get_by_chatbot_id(chatbot_id)
         if not settings:
             raise HTTPException(status_code=404, detail="聊天机器人配置不存在")
 
@@ -339,7 +339,7 @@ async def get_chatbot_interface_data(chatbot_id: str):
     """
     try:
         # 从数据库获取完整的聊天界面配置数据
-        interface_data = await ChatbotInterface.get_by_chatbot_id(chatbot_id)
+        interface_data = ChatbotInterface.get_by_chatbot_id(chatbot_id)
 
         if not interface_data:
             raise HTTPException(status_code=404, detail="指定的聊天机器人配置不存在")

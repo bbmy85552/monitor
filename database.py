@@ -1,13 +1,14 @@
 # database.py
 import os
-import asyncio
-import aiomysql
+import logging
+import pymysql
+from pymysql.cursors import DictCursor
 from typing import Optional, Dict, Any
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
-import logging
 import ssl
+from dbutils.pooled_db import PooledDB
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +25,8 @@ DB_CONFIG = {
     'password': os.getenv('DB_PASSWORD'),
     'db': os.getenv('DB_NAME'),
     'charset': 'utf8mb4',
-    'autocommit': True
+    'autocommit': True,
+    'cursorclass': DictCursor
 }
 
 # 根据环境添加SSL配置
@@ -46,7 +48,7 @@ class DatabaseManager:
         self.pool = None
         self._is_initialized = False
     
-    async def init_pool(self):
+    def init_pool(self):
         """初始化数据库连接池"""
         try:
             logger.info("正在初始化数据库连接池...")
@@ -70,7 +72,18 @@ class DatabaseManager:
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             
-            self.pool = await aiomysql.create_pool(**DB_CONFIG)
+            # 创建连接池
+            self.pool = PooledDB(
+                creator=pymysql,
+                maxconnections=10,  # 连接池最大连接数
+                mincached=2,        # 初始化时创建的连接数
+                maxcached=5,        # 连接池最大空闲连接数
+                maxshared=3,        # 连接池最大共享连接数
+                blocking=True,      # 连接池中如果没有可用连接后是否阻塞等待
+                maxusage=None,      # 一个连接最多被重复使用的次数，None表示无限制
+                **DB_CONFIG
+            )
+            
             self._is_initialized = True
             logger.info("数据库连接池初始化成功")
             
@@ -80,11 +93,10 @@ class DatabaseManager:
             self._is_initialized = False
             raise e
     
-    async def close_pool(self):
+    def close_pool(self):
         """关闭数据库连接池"""
         if self.pool:
-            self.pool.close()
-            await self.pool.wait_closed()
+            self.pool = None
             self._is_initialized = False
             logger.info("数据库连接池已关闭")
     
@@ -93,38 +105,47 @@ class DatabaseManager:
         if not self._is_initialized or self.pool is None:
             raise RuntimeError("数据库连接池未初始化，请检查数据库配置和网络连接")
     
-    async def execute_query(self, query: str, params: tuple = None):
+    def execute_query(self, query: str, params: tuple = None):
         """执行查询语句"""
         self._check_pool()
         try:
-            async with self.pool.acquire() as conn:
-                async with conn.cursor(aiomysql.DictCursor) as cursor:
-                    await cursor.execute(query, params)
-                    return await cursor.fetchall()
+            conn = self.pool.connection()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, params)
+                    return cursor.fetchall()
+            finally:
+                conn.close()
         except Exception as e:
             logger.error(f"数据库查询失败: {str(e)}")
             raise e
     
-    async def execute_insert(self, query: str, params: tuple = None):
+    def execute_insert(self, query: str, params: tuple = None):
         """执行插入语句并返回插入的ID"""
         self._check_pool()
         try:
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute(query, params)
+            conn = self.pool.connection()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, params)
                     return cursor.lastrowid
+            finally:
+                conn.close()
         except Exception as e:
             logger.error(f"数据库插入失败: {str(e)}")
             raise e
     
-    async def execute_update(self, query: str, params: tuple = None):
+    def execute_update(self, query: str, params: tuple = None):
         """执行更新语句并返回影响的行数"""
         self._check_pool()
         try:
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    result = await cursor.execute(query, params)
+            conn = self.pool.connection()
+            try:
+                with conn.cursor() as cursor:
+                    result = cursor.execute(query, params)
                     return result
+            finally:
+                conn.close()
         except Exception as e:
             logger.error(f"数据库更新失败: {str(e)}")
             raise e
@@ -136,7 +157,7 @@ class ImageInformation:
     """图像信息模型"""
     
     @staticmethod
-    async def create(chatbot_id: str, file_name: str, file_type: str, 
+    def create(chatbot_id: str, file_name: str, file_type: str, 
                     file_size: int, asset_type: str, cos_url: str = None) -> str:
         """创建图像信息记录"""
         asset_id = str(uuid.uuid4())
@@ -152,11 +173,11 @@ class ImageInformation:
             cos_url, asset_type, 'success' if cos_url else 'pending'
         )
         
-        await db_manager.execute_insert(query, params)
+        db_manager.execute_insert(query, params)
         return asset_id
     
     @staticmethod
-    async def update_cos_url(asset_id: str, cos_url: str):
+    def update_cos_url(asset_id: str, cos_url: str):
         """更新COS URL"""
         query = """
         UPDATE image_information 
@@ -164,17 +185,17 @@ class ImageInformation:
         WHERE asset_id = %s
         """
         
-        await db_manager.execute_update(query, (cos_url, asset_id))
+        db_manager.execute_update(query, (cos_url, asset_id))
 
 class ChatbotInterface:
     """聊天界面配置模型"""
     
     @staticmethod
-    async def upsert(data: Dict[str, Any]) -> bool:
+    def upsert(data: Dict[str, Any]) -> bool:
         """插入或更新聊天界面配置"""
         # 检查是否已存在
         check_query = "SELECT id FROM chatbot_interface WHERE chatbot_id = %s"
-        existing = await db_manager.execute_query(check_query, (data['chatbot_id'],))
+        existing = db_manager.execute_query(check_query, (data['chatbot_id'],))
         
         if existing:
             # 更新现有记录
@@ -264,12 +285,12 @@ class ChatbotInterface:
                 data.get('bubble_icon_url')
             )
         
-        await db_manager.execute_update(query, params)
+        db_manager.execute_update(query, params)
         return True
     
     @staticmethod
-    async def get_by_chatbot_id(chatbot_id: str) -> Optional[Dict[str, Any]]:
+    def get_by_chatbot_id(chatbot_id: str) -> Optional[Dict[str, Any]]:
         """根据chatbot_id获取配置"""
         query = "SELECT * FROM chatbot_interface WHERE chatbot_id = %s"
-        result = await db_manager.execute_query(query, (chatbot_id,))
+        result = db_manager.execute_query(query, (chatbot_id,))
         return result[0] if result else None 
