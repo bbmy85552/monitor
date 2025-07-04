@@ -11,12 +11,5 @@
       "src": "/(.*)",
       "dest": "main.py"
     }
-  ],
-  "cacheDirectories": [
-    ".venv",
-    "__pycache__"
-  ],
-  "env": {
-    "PYTHONOPTIMIZE": "2"
-  }
+  ]
 }
