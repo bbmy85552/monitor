@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务器监控仪表板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid #e1e8ed;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f1f3f4;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 1.2rem;
+            color: white;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .card-description {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+
+        .status-online {
+            background: #27ae60;
+            box-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
+        }
+
+        .status-offline {
+            background: #e74c3c;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .metric-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #e1e8ed;
+            color: #2c3e50;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d8dd;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        .success-message {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+            margin-top: 15px;
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #95a5a6;
+            text-align: right;
+            margin-top: 10px;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .metric-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>服务器监控仪表板</h1>
+            <p>实时监控服务器状态和性能指标</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="dashboard-grid">
+            <!-- 1. 当前服务器状态 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                        📊
+                    </div>
+                    <div>
+                        <div class="card-title">当前服务器状态</div>
+                        <div class="card-description">实时服务器资源使用情况</div>
+                    </div>
+                </div>
+                <div id="current-metrics">
+                    <div class="loading"></div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadCurrentMetrics()">刷新数据</button>
+                </div>
+            </div>
+
+            <!-- 2. 最新监控数据 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #f093fb, #f5576c);">
+                        📈
+                    </div>
+                    <div>
+                        <div class="card-title">最新监控数据</div>
+                        <div class="card-description">数据库中最新的监控记录</div>
+                    </div>
+                </div>
+                <div id="latest-metrics">
+                    <div class="loading"></div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadLatestMetrics()">刷新数据</button>
+                </div>
+            </div>
+
+            <!-- 3. 历史监控数据 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">
+                        📋
+                    </div>
+                    <div>
+                        <div class="card-title">历史监控数据</div>
+                        <div class="card-description">指定时间范围内的历史数据</div>
+                    </div>
+                </div>
+                <div>
+                    <select id="history-hours" onchange="loadHistoryData()">
+                        <option value="1">最近1小时</option>
+                        <option value="6">最近6小时</option>
+                        <option value="24" selected>最近24小时</option>
+                        <option value="48">最近48小时</option>
+                        <option value="168">最近7天</option>
+                    </select>
+                </div>
+                <div id="history-data">
+                    <div class="loading"></div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadHistoryData()">刷新数据</button>
+                </div>
+            </div>
+
+            <!-- 4. 服务器统计信息 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #fa709a, #fee140);">
+                        📊
+                    </div>
+                    <div>
+                        <div class="card-title">服务器统计信息</div>
+                        <div class="card-description">服务器资源使用率统计</div>
+                    </div>
+                </div>
+                <div id="system-stats">
+                    <div class="loading"></div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadSystemStats()">刷新数据</button>
+                </div>
+            </div>
+
+            <!-- 5. 监控调度器状态 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #a8edea, #fed6e3);">
+                        ⚙️
+                    </div>
+                    <div>
+                        <div class="card-title">监控调度器状态</div>
+                        <div class="card-description">监控任务的运行状态</div>
+                    </div>
+                </div>
+                <div id="scheduler-status">
+                    <div class="loading"></div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="toggleScheduler()">切换状态</button>
+                    <button class="btn btn-secondary" onclick="loadSchedulerStatus()">刷新状态</button>
+                </div>
+            </div>
+
+            <!-- 6. 手动数据收集 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #ffecd2, #fcb69f);">
+                        🔄
+                    </div>
+                    <div>
+                        <div class="card-title">手动数据收集</div>
+                        <div class="card-description">手动触发一次服务器监控数据收集</div>
+                    </div>
+                </div>
+                <div id="manual-collect">
+                    <p>点击按钮手动收集一次服务器监控数据</p>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="manualCollect()">立即收集</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        // 带重试的API请求
+        async function fetchWithRetry(url, options = {}, retries = 3, timeout = 10000) {
+            let lastError;
+            
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
+                    
+                    const response = await fetch(url, {
+                        ...options,
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    lastError = error;
+                    
+                    if (i === retries - 1) {
+                        break;
+                    }
+                    
+                    // 指数退避
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            
+            throw lastError;
+        }
+
+        // 格式化时间戳
+        function formatTimestamp(timestamp) {
+            return new Date(timestamp).toLocaleString('zh-CN');
+        }
+
+        // 格式化字节数
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 显示错误消息
+        function showError(elementId, message, isRetryable = false) {
+            const retryText = isRetryable ? '<br><small>正在重试...</small>' : '';
+            document.getElementById(elementId).innerHTML = `<div class="error-message">${message}${retryText}</div>`;
+        }
+
+        // 显示成功消息
+        function showSuccess(elementId, message) {
+            document.getElementById(elementId).innerHTML = `<div class="success-message">${message}</div>`;
+        }
+
+        // 1. 加载当前服务器状态
+        async function loadCurrentMetrics() {
+            const container = document.getElementById('current-metrics');
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/monitor/current`);
+                
+                if (data.status === 200) {
+                    const metrics = data.data;
+                    container.innerHTML = `
+                        <div class="metric-grid">
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.cpu.cpu_percent.toFixed(1)}%</div>
+                                <div class="metric-label">CPU使用率</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.memory.virtual_memory.percent.toFixed(1)}%</div>
+                                <div class="metric-label">内存使用率</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.disk.disk_usage.percent.toFixed(1)}%</div>
+                                <div class="metric-label">磁盘使用率</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.tcp_connections.total_connections}</div>
+                                <div class="metric-label">TCP连接数</div>
+                            </div>
+                        </div>
+                        <div class="timestamp">更新时间: ${formatTimestamp(metrics.timestamp)}</div>
+                    `;
+                } else {
+                    showError('current-metrics', data.message || '获取数据失败');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('current-metrics', errorMsg);
+            }
+        }
+
+        // 2. 加载最新监控数据
+        async function loadLatestMetrics() {
+            const container = document.getElementById('latest-metrics');
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/monitor/latest`);
+                
+                if (data.status === 200) {
+                    const metrics = data.data;
+                    container.innerHTML = `
+                        <div class="metric-grid">
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.cpu.cpu_percent.toFixed(1)}%</div>
+                                <div class="metric-label">CPU使用率</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.memory.virtual_memory.percent.toFixed(1)}%</div>
+                                <div class="metric-label">内存使用率</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.disk.disk_usage.percent.toFixed(1)}%</div>
+                                <div class="metric-label">磁盘使用率</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${metrics.tcp_connections.total_connections}</div>
+                                <div class="metric-label">TCP连接数</div>
+                            </div>
+                        </div>
+                        <div class="timestamp">数据时间: ${formatTimestamp(metrics.timestamp)}</div>
+                    `;
+                } else {
+                    showError('latest-metrics', data.message || '获取数据失败');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('latest-metrics', errorMsg);
+            }
+        }
+
+        // 3. 加载历史监控数据
+        async function loadHistoryData() {
+            const container = document.getElementById('history-data');
+            const hours = document.getElementById('history-hours').value;
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/monitor/history?hours=${hours}`);
+                
+                if (data.status === 200) {
+                    const records = data.data;
+                    if (records.length > 0) {
+                        const latest = records[0];
+                        container.innerHTML = `
+                            <div class="metric-grid">
+                                <div class="metric-item">
+                                    <div class="metric-value">${latest.cpu.cpu_percent.toFixed(1)}%</div>
+                                    <div class="metric-label">最新CPU</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-value">${latest.memory.virtual_memory.percent.toFixed(1)}%</div>
+                                    <div class="metric-label">最新内存</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-value">${data.count}</div>
+                                    <div class="metric-label">记录数</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-value">${hours}h</div>
+                                    <div class="metric-label">时间范围</div>
+                                </div>
+                            </div>
+                            <div class="timestamp">时间范围: ${hours}小时 (${data.count}条记录)</div>
+                        `;
+                    } else {
+                        showSuccess('history-data', '暂无历史数据');
+                    }
+                } else {
+                    showError('history-data', data.message || '获取数据失败');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('history-data', errorMsg);
+            }
+        }
+
+        // 4. 加载服务器统计信息
+        async function loadSystemStats() {
+            const container = document.getElementById('system-stats');
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/monitor/stats`);
+                
+                if (data.status === 200) {
+                    const stats = data.data;
+                    container.innerHTML = `
+                        <div class="metric-grid">
+                            <div class="metric-item">
+                                <div class="metric-value">${stats.cpu_stats.avg.toFixed(1)}%</div>
+                                <div class="metric-label">CPU平均</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${stats.memory_stats.avg.toFixed(1)}%</div>
+                                <div class="metric-label">内存平均</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${stats.disk_stats.avg.toFixed(1)}%</div>
+                                <div class="metric-label">磁盘平均</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-value">${stats.tcp_stats.avg.toFixed(0)}</div>
+                                <div class="metric-label">TCP平均</div>
+                            </div>
+                        </div>
+                        <div class="timestamp">统计周期: ${stats.period_hours}小时 (${stats.total_records}条记录)</div>
+                    `;
+                } else {
+                    showError('system-stats', data.message || '获取数据失败');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('system-stats', errorMsg);
+            }
+        }
+
+        // 5. 加载监控调度器状态
+        async function loadSchedulerStatus() {
+            const container = document.getElementById('scheduler-status');
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/monitor/scheduler/status`);
+                
+                if (data.status === 200) {
+                    const scheduler = data.data;
+                    const statusClass = scheduler.is_running ? 'status-online' : 'status-offline';
+                    const statusText = scheduler.is_running ? '运行中' : '已停止';
+                    
+                    container.innerHTML = `
+                        <div style="text-align: center; margin: 20px 0;">
+                            <div style="font-size: 2rem; margin-bottom: 10px;">
+                                ${scheduler.is_running ? '✅' : '❌'}
+                            </div>
+                            <div style="font-size: 1.2rem; font-weight: 600;">
+                                调度器状态: ${statusText}
+                                <span class="status-indicator ${statusClass}"></span>
+                            </div>
+                            <div style="margin-top: 10px; color: #7f8c8d;">
+                                收集间隔: ${scheduler.interval_seconds} 秒
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    showError('scheduler-status', data.message || '获取状态失败');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('scheduler-status', errorMsg);
+            }
+        }
+
+        // 6. 切换调度器状态
+        async function toggleScheduler() {
+            const container = document.getElementById('scheduler-status');
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                // 先获取当前状态
+                const statusData = await fetchWithRetry(`${API_BASE}/monitor/scheduler/status`);
+                
+                if (statusData.status === 200) {
+                    const isRunning = statusData.data.is_running;
+                    const endpoint = isRunning ? '/monitor/scheduler/stop' : '/monitor/scheduler/start';
+                    
+                    const data = await fetchWithRetry(`${API_BASE}${endpoint}`, { method: 'POST' });
+                    
+                    if (data.status === 200) {
+                        showSuccess('scheduler-status', data.message);
+                        setTimeout(() => loadSchedulerStatus(), 1000);
+                    } else {
+                        showError('scheduler-status', data.message || '操作失败');
+                    }
+                } else {
+                    showError('scheduler-status', '无法获取当前状态');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('scheduler-status', errorMsg);
+            }
+        }
+
+        // 7. 手动收集数据
+        async function manualCollect() {
+            const container = document.getElementById('manual-collect');
+            container.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/monitor/collect`, { method: 'POST' });
+                
+                if (data.status === 200) {
+                    container.innerHTML = `
+                        <div class="success-message">
+                            ✅ 数据收集成功!<br>
+                            ID: ${data.metrics_id}<br>
+                            时间: ${formatTimestamp(data.timestamp)}
+                        </div>
+                    `;
+                } else {
+                    showError('manual-collect', data.message || '收集失败');
+                }
+            } catch (error) {
+                let errorMsg = '网络错误';
+                if (error.name === 'AbortError') {
+                    errorMsg = '请求超时';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = '服务器错误: ' + error.message;
+                } else {
+                    errorMsg = '网络连接失败: ' + error.message;
+                }
+                showError('manual-collect', errorMsg);
+            }
+        }
+
+        // 网络状态检查
+        function checkNetworkStatus() {
+            return navigator.onLine;
+        }
+
+        // 显示网络状态
+        function updateNetworkStatus() {
+            const statusElement = document.createElement('div');
+            statusElement.style.position = 'fixed';
+            statusElement.style.top = '10px';
+            statusElement.style.right = '10px';
+            statusElement.style.padding = '5px 10px';
+            statusElement.style.borderRadius = '5px';
+            statusElement.style.fontSize = '12px';
+            statusElement.style.zIndex = '1000';
+            
+            if (checkNetworkStatus()) {
+                statusElement.style.backgroundColor = '#e8f5e8';
+                statusElement.style.color = '#2e7d32';
+                statusElement.textContent = '🟢 在线';
+            } else {
+                statusElement.style.backgroundColor = '#ffebee';
+                statusElement.style.color = '#c62828';
+                statusElement.textContent = '🔴 离线';
+            }
+            
+            // 移除旧的状态显示
+            const oldStatus = document.querySelector('.network-status');
+            if (oldStatus) {
+                oldStatus.remove();
+            }
+            
+            statusElement.className = 'network-status';
+            document.body.appendChild(statusElement);
+        }
+
+        // 页面加载时初始化所有数据
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化网络状态检查
+            updateNetworkStatus();
+            
+            // 监听网络状态变化
+            window.addEventListener('online', updateNetworkStatus);
+            window.addEventListener('offline', updateNetworkStatus);
+            
+            loadCurrentMetrics();
+            loadLatestMetrics();
+            loadHistoryData();
+            loadSystemStats();
+            loadSchedulerStatus();
+            
+            // 设置自动刷新
+            setInterval(() => {
+                if (checkNetworkStatus()) {
+                    loadCurrentMetrics();
+                    loadLatestMetrics();
+                }
+            }, 30000); // 每30秒刷新一次
+        });
+    </script>
+</body>
+</html>

@@ -7,3 +7,4 @@ pydantic==2.5.0
 pyOpenSSL==24.0.0
 DBUtils==3.1.1
 tencentcloud-sdk-python==3.0.1056
+psutil==5.9.6

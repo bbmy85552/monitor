@@ -169,7 +169,7 @@ env/
 .idea/
 *.sublime-workspace
 *.sublime-project
-
+.claude/
 
 
 # System
